@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outlook AI 답변 초안 생성기 — 목업</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+      background: #f3f2f1;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ===== LEFT: Outlook-like inbox ===== */
+    .outlook-panel {
+      width: 420px;
+      background: #fff;
+      border-right: 1px solid #ddd;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .outlook-header {
+      background: #0078d4;
+      color: white;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .outlook-header .logo {
+      font-size: 20px;
+    }
+
+    .email-list {
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .email-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      transition: background 0.15s;
+      position: relative;
+    }
+
+    .email-item:hover { background: #f5f5f5; }
+    .email-item.active { background: #e8f2fc; border-left: 3px solid #0078d4; }
+    .email-item.unread .sender { font-weight: 700; }
+
+    .email-item .badge {
+      position: absolute;
+      top: 12px; right: 12px;
+      background: #0078d4;
+      color: white;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 10px;
+    }
+
+    .sender { font-size: 13px; color: #323130; margin-bottom: 2px; }
+    .subject { font-size: 12px; color: #605e5c; margin-bottom: 2px; }
+    .preview { font-size: 11px; color: #a19f9d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .time { font-size: 10px; color: #a19f9d; }
+
+    /* ===== MIDDLE: Email detail ===== */
+    .email-detail {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #faf9f8;
+      overflow: hidden;
+    }
+
+    .email-detail-header {
+      padding: 16px 20px;
+      background: white;
+      border-bottom: 1px solid #edebe9;
+    }
+
+    .email-detail-header h2 {
+      font-size: 16px;
+      color: #323130;
+      margin-bottom: 8px;
+    }
+
+    .meta { font-size: 12px; color: #605e5c; display: flex; gap: 12px; flex-wrap: wrap; }
+    .meta span { display: flex; align-items: center; gap: 4px; }
+
+    .email-body {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #323130;
+    }
+
+    /* ===== Reply compose area ===== */
+    .reply-area {
+      background: white;
+      border-top: 2px solid #edebe9;
+      padding: 16px 20px;
+    }
+
+    .reply-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #605e5c;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .reply-textarea {
+      width: 100%;
+      height: 120px;
+      border: 1px solid #edebe9;
+      border-radius: 4px;
+      padding: 10px;
+      font-size: 13px;
+      color: #323130;
+      resize: none;
+      font-family: inherit;
+      line-height: 1.5;
+      transition: border-color 0.2s;
+    }
+
+    .reply-textarea:focus { outline: none; border-color: #0078d4; }
+    .reply-textarea.highlighted {
+      border-color: #0f7b0f;
+      background: #f6fef6;
+      animation: fadeIn 0.4s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .reply-actions {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn-send {
+      background: #0078d4;
+      color: white;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .btn-send:hover { background: #106ebe; }
+
+    .btn-discard {
+      background: transparent;
+      color: #0078d4;
+      border: 1px solid #0078d4;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    /* ===== RIGHT: AI Panel ===== */
+    .ai-panel {
+      width: 320px;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .ai-panel-header {
+      padding: 14px 16px;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ai-icon {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, #cba6f7, #89b4fa);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+    }
+
+    .ai-panel-header span {
+      font-size: 14px;
+      font-weight: 600;
+      color: #cdd6f4;
+    }
+
+    .ai-status {
+      font-size: 10px;
+      color: #a6e3a1;
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .status-dot {
+      width: 6px; height: 6px;
+      background: #a6e3a1;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    .ai-content {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .analysis-card {
+      background: #313244;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .card-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: #cba6f7;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 8px;
+    }
+
+    .tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .tag {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-weight: 500;
+    }
+
+    .tag.intent { background: #45475a; color: #cba6f7; }
+    .tag.lang { background: #45475a; color: #89b4fa; }
+    .tag.tone { background: #45475a; color: #a6e3a1; }
+
+    .draft-card {
+      background: #313244;
+      border-radius: 8px;
+      padding: 12px;
+      flex: 1;
+    }
+
+    .draft-text {
+      font-size: 12px;
+      line-height: 1.7;
+      color: #cdd6f4;
+      white-space: pre-wrap;
+      min-height: 80px;
+    }
+
+    .draft-text.loading {
+      color: #6c7086;
+      font-style: italic;
+    }
+
+    .typing-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 14px;
+      background: #cba6f7;
+      margin-left: 2px;
+      animation: blink 1s step-end infinite;
+      vertical-align: text-bottom;
+    }
+
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    .ai-actions {
+      padding: 12px 16px;
+      border-top: 1px solid #313244;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .btn-apply {
+      background: linear-gradient(135deg, #cba6f7, #89b4fa);
+      color: #1e1e2e;
+      border: none;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      transition: opacity 0.2s;
+    }
+
+    .btn-apply:hover { opacity: 0.9; }
+    .btn-apply:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-regenerate {
+      background: transparent;
+      color: #89b4fa;
+      border: 1px solid #45475a;
+      padding: 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .btn-regenerate:hover { background: #313244; }
+
+    .notice {
+      font-size: 10px;
+      color: #6c7086;
+      text-align: center;
+    }
+
+    /* Loading bar */
+    .loading-bar {
+      height: 2px;
+      background: linear-gradient(90deg, #cba6f7, #89b4fa, #cba6f7);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      display: none;
+    }
+
+    .loading-bar.active { display: block; }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LEFT: Outlook Inbox -->
+<div class="outlook-panel">
+  <div class="outlook-header">
+    <span class="logo">📧</span>
+    Outlook — 받은 편지함
+  </div>
+  <div class="email-list">
+    <div class="email-item active unread" onclick="selectEmail(0)">
+      <div class="badge">NEW</div>
+      <div class="sender">田中 雄一 (Tanaka)</div>
+      <div class="subject">3月のミーティング日程について</div>
+      <div class="preview">お世話になっております。来月のミーティングに...</div>
+      <div class="time">오전 9:42</div>
+    </div>
+    <div class="email-item unread" onclick="selectEmail(1)">
+      <div class="sender">김미래 (DirectCloud)</div>
+      <div class="subject">Q1 보고서 검토 요청</div>
+      <div class="preview">안녕하세요. 이번 분기 보고서 초안을 보내드립니다...</div>
+      <div class="time">어제</div>
+    </div>
+    <div class="email-item" onclick="selectEmail(2)">
+      <div class="sender">佐藤 花子 (Sato)</div>
+      <div class="subject">契約書の確認をお願いします</div>
+      <div class="preview">いつもお世話になっております。先日の契約書について...</div>
+      <div class="time">3월 25일</div>
+    </div>
+  </div>
+</div>
+
+<!-- MIDDLE: Email Detail + Reply -->
+<div class="email-detail">
+  <div class="email-detail-header">
+    <h2 id="email-subject">3月のミーティング日程について</h2>
+    <div class="meta">
+      <span>📤 <strong>보낸 사람:</strong> 田中 雄一 &lt;tanaka@example.jp&gt;</span>
+      <span>🕐 2026-03-27 09:42</span>
+      <span>🌐 일본어</span>
+    </div>
+  </div>
+
+  <div class="email-body" id="email-body">
+    <p>お世話になっております。田中でございます。</p><br>
+    <p>来月（4月）のプロジェクト進捗ミーティングについて、日程を調整させていただきたく、ご連絡いたしました。</p><br>
+    <p>以下の日程はいかがでしょうか。</p>
+    <ul style="margin: 10px 0 10px 20px;">
+      <li>4月7日（火）14:00〜15:00</li>
+      <li>4月10日（金）10:00〜11:00</li>
+    </ul>
+    <p>ご都合が合わない場合は、ご希望の日時をお知らせください。</p><br>
+    <p>よろしくお願いいたします。</p><br>
+    <p>田中 雄一</p>
+  </div>
+
+  <div class="reply-area">
+    <div class="reply-label">✏️ 답장 작성</div>
+    <textarea class="reply-textarea" id="reply-textarea" placeholder="AI 초안을 적용하거나 직접 작성하세요..."></textarea>
+    <div class="reply-actions">
+      <button class="btn-send">전송</button>
+      <button class="btn-discard" onclick="document.getElementById('reply-textarea').value=''">초기화</button>
+    </div>
+  </div>
+</div>
+
+<!-- RIGHT: AI Panel -->
+<div class="ai-panel">
+  <div class="ai-panel-header">
+    <div class="ai-icon">✨</div>
+    <span>AI 답변 어시스턴트</span>
+    <div class="ai-status">
+      <div class="status-dot"></div>
+      활성
+    </div>
+  </div>
+  <div class="loading-bar" id="loading-bar"></div>
+
+  <div class="ai-content">
+
+    <div class="analysis-card">
+      <div class="card-title">📊 메일 분석</div>
+      <div class="tag-row">
+        <span class="tag intent" id="tag-intent">📋 일정 조율 요청</span>
+        <span class="tag lang" id="tag-lang">🇯🇵 일본어</span>
+        <span class="tag tone" id="tag-tone">🎩 비즈니스 경어</span>
+      </div>
+    </div>
+
+    <div class="draft-card">
+      <div class="card-title">💬 생성된 초안</div>
+      <div class="draft-text" id="draft-text">お世話になっております。
+
+ご連絡いただきありがとうございます。
+
+ご提案いただいた日程について確認いたしました。
+4月7日（火）14:00〜15:00で参加可能です。
+
+何卒よろしくお願いいたします。</div>
+    </div>
+
+  </div>
+
+  <div class="ai-actions">
+    <button class="btn-apply" id="btn-apply" onclick="applyDraft()">
+      📋 Outlook에 초안 적용
+    </button>
+    <button class="btn-regenerate" onclick="regenerate()">
+      🔄 다시 생성
+    </button>
+    <div class="notice">초안을 확인 후 수정하여 전송하세요</div>
+  </div>
+</div>
+
+<script>
+  const emails = [
+    {
+      subject: "3月のミーティング日程について",
+      from: "田中 雄一 <tanaka@example.jp>",
+      lang: "일본어",
+      body: `<p>お世話になっております。田中でございます。</p><br>
+<p>来月（4月）のプロジェクト進捗ミーティングについて、日程を調整させていただきたく、ご連絡いたしました。</p><br>
+<p>以下の日程はいかがでしょうか。</p>
+<ul style="margin: 10px 0 10px 20px;">
+  <li>4月7日（火）14:00〜15:00</li>
+  <li>4月10日（金）10:00〜11:00</li>
+</ul>
+<p>ご都合が合わない場合は、ご希望の日時をお知らせください。</p><br>
+<p>よろしくお願いいたします。</p><br>
+<p>田中 雄一</p>`,
+      intent: "📋 일정 조율 요청",
+      tone: "🎩 비즈니스 경어",
+      langTag: "🇯🇵 일본어",
+      draft: `お世話になっております。
+
+ご連絡いただきありがとうございます。
+
+ご提案いただいた日程について確認いたしました。
+4月7日（火）14:00〜15:00で参加可能です。
+
+何卒よろしくお願いいたします。`
+    },
+    {
+      subject: "Q1 보고서 검토 요청",
+      from: "김미래 <kim@directcloud.co.kr>",
+      lang: "한국어",
+      body: `<p>안녕하세요. 김미래입니다.</p><br>
+<p>이번 Q1 분기 보고서 초안을 작성하였습니다. 검토 후 피드백을 주시면 감사하겠습니다.</p><br>
+<p>가능하시면 이번 주 금요일까지 회신 부탁드립니다.</p><br>
+<p>감사합니다.<br>김미래</p>`,
+      intent: "📄 문서 검토 요청",
+      tone: "💼 비즈니스 격식체",
+      langTag: "🇰🇷 한국어",
+      draft: `안녕하세요, 김미래님.
+
+Q1 보고서 초안 공유해 주셔서 감사합니다.
+
+검토 후 금요일까지 피드백 드리겠습니다.
+
+감사합니다.`
+    },
+    {
+      subject: "契約書の確認をお願いします",
+      from: "佐藤 花子 <sato@partner.jp>",
+      lang: "일본어",
+      body: `<p>いつもお世話になっております。佐藤でございます。</p><br>
+<p>先日お送りした契約書について、内容をご確認いただけましたでしょうか。</p><br>
+<p>修正点やご不明な点がございましたら、お気軽にご連絡ください。</p><br>
+<p>どうぞよろしくお願いいたします。<br>佐藤 花子</p>`,
+      intent: "📝 계약서 확인 요청",
+      tone: "🎩 비즈니스 경어",
+      langTag: "🇯🇵 일본어",
+      draft: `お世話になっております。
+
+契約書を確認いたしました。内容に問題はございません。
+
+引き続きよろしくお願いいたします。`
+    }
+  ];
+
+  let currentEmail = 0;
+
+  function selectEmail(idx) {
+    currentEmail = idx;
+    const email = emails[idx];
+
+    // Update email list active state
+    document.querySelectorAll('.email-item').forEach((el, i) => {
+      el.classList.toggle('active', i === idx);
+    });
+
+    // Update email detail
+    document.getElementById('email-subject').textContent = email.subject;
+    document.getElementById('email-body').innerHTML = email.body;
+    document.getElementById('reply-textarea').value = '';
+    document.getElementById('reply-textarea').classList.remove('highlighted');
+
+    // Trigger AI analysis animation
+    triggerAnalysis(email);
+  }
+
+  function triggerAnalysis(email) {
+    const bar = document.getElementById('loading-bar');
+    const draftEl = document.getElementById('draft-text');
+    const applyBtn = document.getElementById('btn-apply');
+
+    // Show loading
+    bar.classList.add('active');
+    applyBtn.disabled = true;
+    draftEl.classList.add('loading');
+    draftEl.textContent = 'AI가 메일을 분석하고 있습니다...';
+
+    document.getElementById('tag-intent').textContent = '⏳ 분석 중...';
+    document.getElementById('tag-lang').textContent = '⏳';
+    document.getElementById('tag-tone').textContent = '⏳';
+
+    setTimeout(() => {
+      document.getElementById('tag-intent').textContent = email.intent;
+      document.getElementById('tag-lang').textContent = email.langTag;
+      document.getElementById('tag-tone').textContent = email.tone;
+    }, 800);
+
+    setTimeout(() => {
+      bar.classList.remove('active');
+      draftEl.classList.remove('loading');
+      typeText(draftEl, email.draft, () => {
+        applyBtn.disabled = false;
+      });
+    }, 1500);
+  }
+
+  function typeText(el, text, callback) {
+    el.textContent = '';
+    let i = 0;
+    const cursor = document.createElement('span');
+    cursor.className = 'typing-cursor';
+    el.appendChild(cursor);
+
+    const interval = setInterval(() => {
+      el.insertBefore(document.createTextNode(text[i]), cursor);
+      i++;
+      if (i >= text.length) {
+        clearInterval(interval);
+        el.removeChild(cursor);
+        if (callback) callback();
+      }
+    }, 18);
+  }
+
+  function applyDraft() {
+    const draft = emails[currentEmail].draft;
+    const textarea = document.getElementById('reply-textarea');
+    textarea.value = draft;
+    textarea.classList.add('highlighted');
+    textarea.focus();
+
+    const btn = document.getElementById('btn-apply');
+    btn.textContent = '✅ 적용 완료!';
+    setTimeout(() => { btn.textContent = '📋 Outlook에 초안 적용'; }, 2000);
+  }
+
+  function regenerate() {
+    triggerAnalysis(emails[currentEmail]);
+    document.getElementById('reply-textarea').value = '';
+    document.getElementById('reply-textarea').classList.remove('highlighted');
+  }
+</script>
+</body>
+</html>
